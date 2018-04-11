@@ -1,0 +1,308 @@
+
+---
+title: 'Titanic Data Exploration and Modelling'  
+author: 'Dominika Kata'  
+date: 'X February 2018'  
+output:
+    html_document:
+        toc: true
+        number_sections: true
+        theme: cosmo
+        highlight: haddock
+---
+
+I'm happy to present you my first Kaggle script! As I am new to data science I've decided to start with Titanic competition in order to use some of the techniques I've learnt during my studies. 
+In this script I will first explore the data, impute missing values, create some new variables and of course make a predictions using 3 methods: **Logistic Regression**, **Decision Tree**, and **Random Forest**.
+
+# Getting and Cleaning Data
+
+## Loading Packages
+
+In my analysis I used the following packages:
+
+```{r, message = FALSE, warning=FALSE}
+# Loading packages
+library(readr) # data import
+library(dplyr) # data manipulation
+library(ggplot2) # data visualization
+library(missForest) # missing data imputation
+library(corrplot) # used for variables correlation
+library(rpart) # Decision Tree classification algorythm
+library(rpart.plot) # Decision Tree visualization
+library(randomForest) # Random Forest classification algorythm
+```
+
+## Loading and Checking our Data
+
+Ok, now I can download the data:
+
+```{r, message=FALSE, warning=FALSE}
+# Getting data
+train <- read_csv("train.csv")
+test <- read_csv("test.csv")
+```
+
+In order to perform data wrangling and some visualisations I'm going to combine these two datasets and run `str` and `summary` commands:
+
+```{r, message=FALSE, warning=FALSE}
+# Joining datasets
+all <- bind_rows(train, test)
+
+# Quick look
+str(all)
+summary (all)
+```
+
+It's always good to start data exploration with `str` and `summary` commands as it gives us the general information about our data set. In this case we have 1309 observations of 12 variables. We can also see that our variables have different classes and that we will have to deal with missing values as well.  
+Next step would be checking the top and the bottom of the dataset just to make sure everything was loaded properly:
+```{r, message=FALSE, warning=FALSE}
+# Looking at the top and the botom of the data
+head(all)
+tail(all)
+```
+
+It appears that data were loaded correctly. We can also see that `bind_rows` from `dplyr` package is pretty useful in binding two datasets that have different number of columns. in the *test* dataset we don't have the *Survived* column. We can see on the tail that what happended was it added this column and imputed it with *NA's*. 
+Now, let's see which variables contain missing data:
+```{r, message=FALSE, warning=FALSE}
+sapply(all, function(x) sum(is.na(x)))
+```
+
+As we can see we the *Age* variable has 263 missing values, the *Fare* variable has 1 *NA*, the *Cabin* variable is missing 1014 values which is over 77% of all observations, and the *Embarked* variable is missing two values.  I will deal with these later on while exploring all the variables separately.  
+
+# Variables Exploration and Feature Engineering
+In this section I will take a closer look at all dependent variables.  
+For the independent variable *Survived* we can check that in the *train* dataset 342 passangers survived and 549 died.
+
+```{r, message=FALSE, warning=FALSE}
+# Survived Variable 
+table(train$Survived)
+```
+
+## Pclass Variable
+Pclass variable outlines Ticket class, with three levels: 1, 2 or 3. We can look closer on the following graph:
+```{r, message=FALSE, warning=FALSE}
+ggplot(all[1:891,], aes(x = Pclass, fill = factor(Survived)))+
+    geom_bar(stat='count', position='stack') +
+    ggtitle("Survival Based on Ticket Class") +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    scale_fill_discrete(name = "Survived")+
+    scale_x_continuous(breaks=c(1:11)) +
+    geom_text(stat = "count", aes(label = ..count.., y = ..count..), size = 4)
+
+# Percentage of people survived in each class
+all[1:891,] %>% group_by(Pclass) %>% summarise(survived_percentage = (sum(Survived)/length(Pclass)*100))
+```
+
+The highest survival rate is observed in 1st class (almost 63%) and the lowest in 3rd: 24%. Let's see who these classes consist of:
+
+```{r, message=FALSE, warning=FALSE}
+# Table: Pclass and Sex
+table(train$Pclass, train$Sex)
+
+#Table: Pclass and Sex (Survived only)
+table(train[train$Survived==1,]$Pclass,train[train$Survived==1,]$Sex)
+```
+
+The first class has 94 women 91 of whom survived, which gives almost 97% survival rate. The second class women also have good survival rate, which equals to 92%. For women in thord class this rate was way lower equal to 50%, however it was higher that for men in any class. The survival rate for men in 1st, 2nd and 3rd class was respectively: 37%, 16%, 14%. This shows that *Pclass* and *Sex* variables are promising in predictin survival in Titanc.
+
+Now, I'm just going to change the class of *Pclass* variable to factor.
+```{r, message=FALSE, warning=FALSE}
+all$Pclass <- as.factor(all$Pclass) 
+```
+
+## Name Variable
+From other titanic tutorials that I reviewed, it was clear that getting the title out of the *Name* variable helped getting a better prediction a lot. So I'm going to try that now.
+```{r, message=FALSE, warning=FALSE}
+#Getting the title from the Name variable
+Name_split <- strsplit(all$Name, split='[,.]')
+Name_title <-sapply(Name_split, "[", 2)
+Name_title <- substring(Name_title, 2)
+table(Name_title)
+
+# Lenght of the Name variable
+Name_len  <- nchar(all$Name)
+all <- mutate(all, Name_length = Name_len)
+
+```
+
+## Sex Variable  
+As seen before Sex variable is relevant in determining survival on Titanic. It's confirmed on the following plot:
+```{r, message=FALSE, warning=FALSE}
+ggplot(all[1:891,], aes(x = Sex, fill = factor(Survived)))+
+    geom_bar(stat='count', position='stack') +
+    ggtitle("Survival Based on Gender") +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    scale_fill_discrete(name = "Survived")
+
+#Changing class to factor
+all$Sex <- as.factor(all$Sex)
+```
+
+## Age Variable
+There are 263 missing values in *Age* variable that we need to take care of. 
+```{r, message=FALSE, warning=FALSE}
+sum(is.na(all$Age))
+```
+
+
+## SibSp, Parch and new family_size Variables  
+*SibSp* variable is the number of siblings or spouses aboard the Titanic, and *Parch* variable is the number of parents or children on the Titanic. Thankfully both variables aren't missing any values.  
+Now, I will create new variable called *family_size*, which will be equal to *SibSp*+*Parch*+1 and explore it on the graph:
+
+```{r, message=FALSE, warning=FALSE}
+
+all <- mutate(all, family_size = SibSp+Parch+1) 
+
+# visualization family_size variale on a plot
+
+ggplot(all[1:891,], aes(x = family_size, fill = factor(Survived)))+
+    geom_bar(stat='count', position='dodge') +
+    ggtitle("Survival Based on family size") +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    scale_fill_discrete(name = "Survived") +
+    scale_x_continuous(breaks=c(1:11))
+```
+
+On the plot we can see that for family sizes between 2 and 4 there were more survivals than deaths. Single people had over 2 times more deaths than survivals. The same relationship holds for family sizes over 5 members, however with a much less difference.  
+So, I divided *family_size* variable into 3 groups: 'single', 'medium' and 'big':
+
+```{r, message=FALSE, warning=FALSE}
+
+# Dividing family_size variable into 3 groups: singe, medium, big
+all$family_size <- ifelse(all$family_size == 1, "single", 
+                          ifelse(all$family_size > 4, "big", "medium"))
+
+# Changing class to factor
+all$family_size <- as.factor(all$family_size)
+```
+
+## Ticket Variable
+*Ticket * variable also has no missing values. Similarly as for *family_size* variable I will count people on the same ticket number to check weather there is a survival penalty for some groups. 
+
+```{r, message=FALSE, warning=FALSE}
+
+# Creating new ticket_count variable
+ticket_count <- rep("NA", times = nrow(all))
+
+for (i in 1:nrow(all)){
+    
+    ticket_count[i] <- nrow(all[all$Ticket == all$Ticket[i],])
+}
+
+all <- mutate(all, ticket_count)
+
+
+# visualization ticket_count variale on a plot
+ggplot(all[1:891,], aes(x = as.numeric(ticket_count), fill = factor(Survived)))+
+    geom_bar(stat='count', position='dodge') +
+    ggtitle("Survival Based on a Ticket Count") +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    scale_fill_discrete(name = "Survived") +
+    scale_x_continuous(breaks=c(1:11))
+```
+
+The plot for *ticket_count* is really similar to the *family_size* variable. There is also a survival penalty for tickets with 1 and over 5 passangers. So as earlier I will divide this variable into 3 groups and check correlation between *ticket_count* and the *family_size* variables:
+
+```{r, message=FALSE, warning=FALSE}
+
+all$ticket_count <- ifelse(all$ticket_count == 1, "single", 
+                           ifelse(all$ticket_count > 4, "big", "medium")) 
+
+# Changing class to factor
+all$ticket_count <- as.factor(all$ticket_count)
+
+# Correlation between family_size and ticket_count
+family_size <-  all$SibSp+all$Parch+1 # variable before dividing into 3 groups
+cor(family_size, as.numeric(ticket_count), method = "pearson")
+```
+
+Correlation between these two variables is iver 80% so we can say that in general families travel on the same ticket.
+
+We could also look into ticket numbers and try to extract some information from this variable, however I will not focus on that in my analysis.
+
+## Fare Variable
+
+*Fare* variable is a passenger fare. There is 1 missing value for this variable:
+```{r, message=FALSE, warning=FALSE}
+all[is.na(all$Fare)==TRUE,]
+```
+
+I will imput this value with the fare median for passangers with the same sex, place of embarkement and class.
+```{r, message=FALSE, warning=FALSE}
+
+all[is.na(all$Fare)==TRUE,]$Fare <- median(all[(all$Embarked == "S" & all$Sex == "male" & all$Pclass == "3"),"Fare"]$Fare, na.rm = T)
+
+# Checking imputation
+all[1044,"Fare"]
+```
+
+Now, let's look at *Fare* histogram:
+```{r, message=FALSE, warning=FALSE}
+# Plotting Density Plot for Fare Variable
+
+ggplot(all, aes(x = Fare))+
+    geom_density(kernel = "gaussian") +
+    ggtitle("FDensity Plot for Fare Variable") +
+    theme(plot.title = element_text(hjust = 0.5)) 
+    
+```
+
+Density plot shows that *Fare* variable is heavily right skewed and multimodal. Let's try to take the logarithm of this variable in order to obtain more normal distribution.
+
+```{r, message=FALSE, warning=FALSE}
+
+# Creating new Fare_ln variable
+
+all <- mutate(all, Fare_ln = as.numeric(ifelse(all$Fare == 0,"NA",log(all$Fare))))
+
+# Plotting Density Plot for Fare_ln Variable
+
+ggplot(all, aes(x = Fare_ln))+
+    geom_density(kernel = "gaussian") +
+    ggtitle("Density Plot for Fare_ln Variable") +
+    theme(plot.title = element_text(hjust = 0.5)) 
+```
+
+Even after taking the logarithm, the variable is still right skewed, however outliers don't seem to be so visible.
+
+I will not explore the *Cabin* variable as it consists of over 77% missing values and I probably won't include it in my further analysis.
+
+## Embarked Variable
+
+This variable is a port of embarkation, with three levels: C (Cherbourg), Q (Queenstown) and S (Southampton).  
+There are two passangers with missing *Embarked* variable:
+```{r, message=FALSE, warning=FALSE}
+
+all[is.na(all$Embarked)==T,]
+```
+
+I will impute these values basing on fare median for similar observations:
+```{r, message=FALSE, warning=FALSE}
+
+## Finding median for similar observations
+all %>%
+    filter(Pclass ==1 & Sex == "female" & ticket_count == "medium") %>%
+    group_by(Embarked)%>%
+    summarise(avg_fare = median(Fare))
+```
+Two passangers with missing *Embarked* value have *Fare* equal to 80.00. The closest fare median value (79.25) is observed for passangers who embarked in Southampton. So I will imput value "S" in the *Embarked* variable for our 2 passangers. 
+```{r, message=FALSE, warning=FALSE}
+# Missing data imputation
+all[is.na(all$Embarked)==T,]$Embarked <- "S"
+
+# Checking imputation
+all[c(62,830),"Embarked"]
+
+# Changing class to factor
+all$Embarked <- as.factor(all$Embarked)
+```
+
+
+
+
+
+
+
+
+
+
