@@ -22,11 +22,11 @@ In my analysis I used the following packages:
 
 ```{r, message = FALSE, warning=FALSE}
 # Loading packages
-library(readr) # data import
-library(dplyr) # data manipulation
-library(ggplot2) # data visualization
-library(missForest) # missing data imputation
-library(corrplot) # used for variables correlation
+library(readr) # Data import
+library(dplyr) # Data manipulation
+library(ggplot2) # Data visualization
+library(missForest) # Missing data imputation
+library(corrplot) # Used for variables correlation
 library(rpart) # Decision Tree classification algorythm
 library(rpart.plot) # Decision Tree visualization
 library(randomForest) # Random Forest classification algorythm
@@ -55,6 +55,7 @@ summary (all)
 
 It's always good to start data exploration with `str` and `summary` commands as it gives us the general information about our data set. In this case we have 1309 observations of 12 variables. We can also see that our variables have different classes and that we will have to deal with missing values as well.  
 Next step would be checking the top and the bottom of the dataset just to make sure everything was loaded properly:
+
 ```{r, message=FALSE, warning=FALSE}
 # Looking at the top and the botom of the data
 head(all)
@@ -63,6 +64,7 @@ tail(all)
 
 It appears that data were loaded correctly. We can also see that `bind_rows` from `dplyr` package is pretty useful in binding two datasets that have different number of columns. in the *test* dataset we don't have the *Survived* column. We can see on the tail that what happended was it added this column and imputed it with *NA's*. 
 Now, let's see which variables contain missing data:
+
 ```{r, message=FALSE, warning=FALSE}
 sapply(all, function(x) sum(is.na(x)))
 ```
@@ -74,74 +76,127 @@ In this section I will take a closer look at all dependent variables.
 For the independent variable *Survived* we can check that in the *train* dataset 342 passangers survived and 549 died.
 
 ```{r, message=FALSE, warning=FALSE}
-# Survived Variable 
+# Survived variable 
 table(train$Survived)
 ```
 
-## Pclass Variable
-Pclass variable outlines Ticket class, with three levels: 1, 2 or 3. We can look closer on the following graph:
+## Pclass variable
+Pclass variable outlines Ticket Class, with three levels: 1, 2 or 3. We can look closer on the following graph:
+
 ```{r, message=FALSE, warning=FALSE}
 ggplot(all[1:891,], aes(x = Pclass, fill = factor(Survived)))+
     geom_bar(stat='count', position='stack') +
     ggtitle("Survival Based on Ticket Class") +
     theme(plot.title = element_text(hjust = 0.5)) +
     scale_fill_discrete(name = "Survived")+
-    scale_x_continuous(breaks=c(1:11)) +
-    geom_text(stat = "count", aes(label = ..count.., y = ..count..), size = 4)
+    scale_x_continuous(breaks=c(1:11)) 
 
 # Percentage of people survived in each class
 all[1:891,] %>% group_by(Pclass) %>% summarise(survived_percentage = (sum(Survived)/length(Pclass)*100))
 ```
 
-The highest survival rate is observed in 1st class (almost 63%) and the lowest in 3rd: 24%. Let's see who these classes consist of:
+The highest survival rate is observed in the 1st class (almost 63%) and the lowest in the 3rd: 24%. Let's see what genders these classes consist of:
 
 ```{r, message=FALSE, warning=FALSE}
 # Table: Pclass and Sex
 table(train$Pclass, train$Sex)
 
-#Table: Pclass and Sex (Survived only)
+# Table: Pclass and Sex (Survived only)
 table(train[train$Survived==1,]$Pclass,train[train$Survived==1,]$Sex)
 ```
 
 The first class has 94 women 91 of whom survived, which gives almost 97% survival rate. The second class women also have good survival rate, which equals to 92%. For women in thord class this rate was way lower equal to 50%, however it was higher that for men in any class. The survival rate for men in 1st, 2nd and 3rd class was respectively: 37%, 16%, 14%. This shows that *Pclass* and *Sex* variables are promising in predictin survival in Titanc.
 
 Now, I'm just going to change the class of *Pclass* variable to factor.
+
 ```{r, message=FALSE, warning=FALSE}
 all$Pclass <- as.factor(all$Pclass) 
 ```
 
-## Name Variable
-From other titanic tutorials that I reviewed, it was clear that getting the title out of the *Name* variable helped getting a better prediction a lot. So I'm going to try that now.
+## Name variable
+From other titanic tutorials that I have reviewed, it was clear that getting the title out of the *Name* variable helped getting a better prediction a lot. So I'm going to try that now.
+
 ```{r, message=FALSE, warning=FALSE}
-#Getting the title from the Name variable
-Name_split <- strsplit(all$Name, split='[,.]')
-Name_title <-sapply(Name_split, "[", 2)
-Name_title <- substring(Name_title, 2)
-table(Name_title)
+# Getting the title from the Name variable
+name_split <- strsplit(all$Name, split='[,.]')
+name_title <-sapply(name_split, "[", 2)
+name_title <- substring(name_title, 2)
+table(name_title)
+```
 
-# Lenght of the Name variable
-Name_len  <- nchar(all$Name)
-all <- mutate(all, Name_length = Name_len)
+As we can see from the table there are some uncommon titles (*Capt, Col, Don, Dona, Dr, Jonkheer, Lady, Major, Rev, Sir, the Countess*) that I would group together. Moreover I will equate *Mlle* title with *Miss* and *Mme, Ms* with *Mrs*.
 
+```{r, message=FALSE, warning=FALSE}
+# Grouping similar titles
+uncommon_titles <- c("Capt", "Col", "Don", "Dona", "Dr", "Jonkheer", "Lady", "Major", "Rev", "Sir", "the Countess")
+
+name_title[name_title %in% uncommon_titles] <- "uncommon"
+
+name_title[name_title == "Mlle"] <- "Miss"
+name_title[name_title %in% c("Mme", "Ms")] <- "Mrs"
+
+# Adding Title variable and changing class to factor
+all <- mutate(all, Title = name_title) 
+all$Title <- as.factor(all$Title)
 ```
 
 ## Sex Variable  
 As seen before Sex variable is relevant in determining survival on Titanic. It's confirmed on the following plot:
+
 ```{r, message=FALSE, warning=FALSE}
+# Sex variable visualisation
 ggplot(all[1:891,], aes(x = Sex, fill = factor(Survived)))+
     geom_bar(stat='count', position='stack') +
     ggtitle("Survival Based on Gender") +
     theme(plot.title = element_text(hjust = 0.5)) +
     scale_fill_discrete(name = "Survived")
 
-#Changing class to factor
+# Changing class to factor
 all$Sex <- as.factor(all$Sex)
 ```
 
 ## Age Variable
-There are 263 missing values in *Age* variable that we need to take care of. 
+There are 263 missing values in the *Age* variable that we need to take care of. 
+
 ```{r, message=FALSE, warning=FALSE}
 sum(is.na(all$Age))
+```
+
+I'm going to use the **missForest** package to impute these missing values.
+
+```{r, message=FALSE, warning=FALSE}
+# Dataset used for imputation
+age.mis <- as.data.frame(all[,c(2,3,5,6,7,8,10,12)])
+
+# Changing class to factor
+age.mis$Embarked <- as.factor(age.mis$Embarked)
+age.mis$Survived <- as.factor(age.mis$Survived)
+
+# Imputation
+age_imp <- missForest(age.mis)
+age_new <- age_imp[[1]][4]
+age_new <- as.numeric(age_new$Age)
+```
+
+Fisrty I selected variables that I felt would be useful for imtutaion. Next some variables needed their class changed in order for algotithm to work. Next I executed the 'missForrest' command for imputation. Let's take a look at the histogram of the imputed *Age* variable.
+
+```{r, message=FALSE, warning=FALSE}
+# Age variable histogram
+hist(age_new, freq=F)
+```
+
+Now, let's add our new imputed *Age* variable and draw a boxplot.
+
+```{r, message=FALSE, warning=FALSE}
+# Adding the new Age variable
+all$Age <- age_new
+
+# Age variable visualization
+ggplot(all[1:891,], aes(factor(Survived), Age))+
+    geom_boxplot() +
+    ggtitle("Survival Based on Age") +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    scale_fill_discrete(name = "Survived")
 ```
 
 

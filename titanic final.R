@@ -5,11 +5,12 @@ getwd()
 ## Getting and Cleaning Data
 
 # Loading packages
-library(readr) # data import
-library(dplyr) # data manipulation
-library(ggplot2) # data visualization
-library(missForest) # missing data imputation 
-library(corrplot) # used for variables correlation
+
+library(readr) # Data import
+library(dplyr) # Data manipulation
+library(ggplot2) # Data visualization
+library(missForest) # Missing data imputation
+library(corrplot) # Used for variables correlation
 library(rpart) # Decision Tree classification algorythm
 library(rpart.plot) # Decision Tree visualization
 library(randomForest) # Random Forest classification algorythm
@@ -39,59 +40,71 @@ sapply(all, function(x) sum(is.na(x)))
 
 ## Variables Exploration and Feature Engineering
 
-# Survived Variable 
+# Survived variable 
 
 table(train$Survived)
 
-# Pclass Variable
+# Pclass variable
 
-##################### Stack Overflow
 ggplot(all[1:891,], aes(x = Pclass, fill = factor(Survived)))+
     geom_bar(stat='count', position='stack') +
     ggtitle("Survival Based on Ticket Class") +
     theme(plot.title = element_text(hjust = 0.5)) +
     scale_fill_discrete(name = "Survived")+
-    scale_x_continuous(breaks=c(1:11)) +
-    geom_text(stat = "count", aes(label = ..count.., y = ..count..), size = 4)
+    scale_x_continuous(breaks=c(1:11)) 
+    
    
 # Percentage of people survived in each class
+
 all[1:891,] %>% group_by(Pclass) %>% summarise(survived_percentage = (sum(Survived)/length(Pclass)*100))
 
 # Table: Pclass and Sex
+
 table(train$Pclass, train$Sex)
 
-#Table: Pclass and Sex (Survived only)
+# Table: Pclass and Sex (Survived only)
+
 table(train[train$Survived==1,]$Pclass,train[train$Survived==1,]$Sex)
    
-############ Adding variable
-
-all <- mutate(all, women_1_2_class = ifelse(Sex=="female", ifelse(Pclass == 3, 0,1),0))
-all$women_1_2_class <- as.factor(all$women_1_2_class)
-
 # Changing Pclass to factor variable
+
 all$Pclass <- as.factor(all$Pclass) 
 
 # Name Variable
 
-#Getting the title from the Name variable
-Name_split <- strsplit(all$Name, split='[,.]')
-Name_title <-sapply(Name_split, "[", 2)
-Name_title <- substring(Name_title, 2)
-table(Name_title)
-# z misiem pomyslec jak podzielic i potem mutate
+# Getting the title from the Name variable
 
-# Lenght of the Name variable
-Name_len  <- nchar(all$Name)
-all <- mutate(all, Name_length = Name_len)
+name_split <- strsplit(all$Name, split='[,.]')
+name_title <-sapply(name_split, "[", 2)
+name_title <- substring(name_title, 2)
+table(name_title)
 
+# Grouping similar titles
+
+uncommon_titles <- c("Capt", "Col", "Don", "Dona", "Dr", "Jonkheer", "Lady",
+                     "Major", "Rev", "Sir", "the Countess")
+
+name_title[name_title %in% uncommon_titles] <- "uncommon"
+
+name_title[name_title == "Mlle"] <- "Miss"
+name_title[name_title %in% c("Mme", "Ms")] <- "Mrs"
+
+# Adding Title variable and changing class to factor
+
+all <- mutate(all, Title = name_title) 
+all$Title <- as.factor(all$Title)
 
 # Sex variable
+
+# Sex variable visualisation
 
 ggplot(all[1:891,], aes(x = Sex, fill = factor(Survived)))+
     geom_bar(stat='count', position='stack') +
     ggtitle("Survival Based on Gender") +
     theme(plot.title = element_text(hjust = 0.5)) +
     scale_fill_discrete(name = "Survived")
+
+# Changing class to factor
 
 all$Sex <- as.factor(all$Sex)
 
@@ -101,29 +114,30 @@ sum(is.na(all$Age))
 
 # Age variable imputation using missForest package
 
-# dataset used for imputation
+# Dataset used for imputation
+
 age.mis <- as.data.frame(all[,c(2,3,5,6,7,8,10,12)])
 
 # Changing class to factor
+
 age.mis$Embarked <- as.factor(age.mis$Embarked)
 age.mis$Survived <- as.factor(age.mis$Survived)
 
-#Imputation
+# Imputation
+
 age_imp <- missForest(age.mis)
-a <- age_imp[[1]][4]
-a <- as.numeric(a$Age)
+age_new <- age_imp[[1]][4]
+age_new <- as.numeric(age_new$Age)
 
-table(a == all$Age)
+# Age variable histogram
 
+hist(age_new, freq=F)
 
-hist(a, freq=F)
-par(mfrow = c(1,2))
-hist(all$Age, freq = F)
-age_imp$OOBerror
+# Adding the new Age variable
 
+all$Age <- age_new
 
-age_full <- all[!is.na(all$Age)==T,]
-
+# Age variable visualization
 
 ggplot(all[1:891,], aes(factor(Survived), Age))+
     geom_boxplot() +
