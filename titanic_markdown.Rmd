@@ -471,7 +471,6 @@ Prediction_logistic <- data.frame(PassengerId = test$PassengerId, Survived = cla
 write.csv(Prediction_logistic, file = "logistic.csv", row.names = FALSE)
 ```
 
-This model resulted in 0.77990 accuracy.
 
 ## Decision Tree prediction
 
@@ -483,7 +482,6 @@ Prediction_tree <- data.frame(PassengerId = test$PassengerId, Survived = pred_tr
 write.csv(Prediction_tree, file = "tree.csv", row.names = FALSE)
 ```
 
-This model resulted in 0.78947 accuracy.
 
 ## Random Forest prediction
 
@@ -496,7 +494,6 @@ Prediction_random <- data.frame(PassengerId = test$PassengerId, Survived = pred_
 write.csv(Prediction_random, file = "random.csv", row.names = FALSE)
 ```
 
-This model resulted in 0.79904 accuracy.
 
 # Summary
 Thank you for sharing your time with me and my tutorial. As it turned out the best result was obtained with the **Random Forest** algorithm.
